@@ -2,9 +2,24 @@
 #include <string>
 #include <fstream>
 #include <vector>
+#include <search.h>
 #include "pll.h"
 
 using namespace std;
+pll_utree_t *loadTree(const string &newickFile) {
+  pll_utree_t * tree = pll_utree_parse_newick(newickFile.c_str());
+  if (!tree) {
+    cerr << "[Error] could not parse " << newickFile << endl;
+  }
+  hcreate(tree->tip_count);
+  for (int i = 0; i < tree->tip_count; ++i) {
+    ENTRY entry;
+    entry.key = tree->nodes[i]->label;
+    entry.data = &tree->nodes[i]->clv_index;
+    hsearch(entry, ENTER);
+  }
+  return tree;
+}
 
 pll_msa_t *loadMSA(const string &msaFile) {
   pll_phylip_t * fd = pll_phylip_open(msaFile.c_str(), pll_map_phylip);
@@ -72,6 +87,7 @@ int main(int argc, char ** argv)
   string newickFile = argv[i++];
   string outputFile = argv[i++];
 
+  pll_utree_t * tree = loadTree(newickFile);
   pll_msa_t *fullMSA = loadMSA(msaFile);
   vector<pll_msa_t *> partitionnedMSAs;
   partitionMSA(fullMSA, partFile, partitionnedMSAs);  
