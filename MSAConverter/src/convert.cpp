@@ -69,6 +69,32 @@ void partitionMSA(const pll_msa_t *msa,
   }
 }
 
+pll_partition_t *createPartition(const pll_msa_t *msa)
+{
+
+  pll_partition_t *partition = pll_partition_create(msa->count,
+      msa->count - 1, // inner node count
+      4, // states
+      (unsigned int)(msa->length),
+      1,
+      2 * msa->count - 2, // branch count
+      1,
+      msa->count - 1, // inner node count
+      PLL_ATTRIB_ARCH_CPU | PLL_ATTRIB_SITE_REPEATS);
+  if (!partition) {
+    cerr << "[Error] Could not create a partition" << endl;
+  }
+  return partition;
+}
+
+void createPartitions(const vector<pll_msa_t *> &msas,
+  vector<pll_partition_t *> &partitions)
+{
+  for (auto msa: msas) {
+    partitions.push_back(createPartition(msa));
+  }
+}
+
 void printHelp()
 {
   cout << "./converter msa partition newick outputfile" << endl;
@@ -91,7 +117,8 @@ int main(int argc, char ** argv)
   pll_msa_t *fullMSA = loadMSA(msaFile);
   vector<pll_msa_t *> partitionnedMSAs;
   partitionMSA(fullMSA, partFile, partitionnedMSAs);  
-
+  vector<pll_partition_t *> partitions;
+  createPartitions(partitionnedMSAs, partitions); 
   cout << "Successfuly wrote output into " << outputFile << endl;
   return 0;
 }
