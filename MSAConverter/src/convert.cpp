@@ -101,11 +101,18 @@ void partitionMSA(const pll_msa_t *msa,
   }
 }
 
+unsigned int always_enable_repeats(pll_partition_t *partition,
+    unsigned int left_clv,
+    unsigned int right_clv)
+{
+  return 1;
+}
+
 pll_partition_t *createPartition(const pll_msa_t *msa)
 {
   const int RATES = 1;
   pll_partition_t *partition = pll_partition_create(msa->count,
-      msa->count - 1, // inner node count
+      msa->count - 2, // inner node count
       4, // states
       (unsigned int)(msa->length),
       1,
@@ -116,7 +123,11 @@ pll_partition_t *createPartition(const pll_msa_t *msa)
   if (!partition) {
     cerr << "[Error] Could not create a partition" << endl;
   }
-  
+  if (!partition->repeats) {
+    cerr << "[ERROR] Repeats disabled" << endl;
+    return 0;
+  }
+  partition->repeats->enable_repeats = always_enable_repeats;
   double frequencies[4] = { 0.17, 0.19, 0.25, 0.39 };
   double subst_params[6] = {1,1,1,1,1,1};
   double rate_cats[RATES] = {1.0};
@@ -146,17 +157,36 @@ void createPartitions(const vector<pll_msa_t *> &msas,
   }
 }
 
+void rec_print_leaves(pll_unode_t *node) {
+  if (!node->next) {
+    cout << node->label << " ";
+  } else {
+    rec_print_leaves(node->next->back);
+    rec_print_leaves(node->next->next->back);
+  }
+}
+
+void print_split(pll_unode_t *node) {
+  rec_print_leaves(node);
+  cout << "| ";
+  rec_print_leaves(node->back);
+  cout << endl;
+}
+
 static int cb_full_traversal(pll_unode_t * node)
 {
   return 1;
 }
 
-void updatePartials(vector<pll_partition_t *> &partitions, pll_utree_t *utree)
+void updatePartials(vector<pll_partition_t *> &partitions, pll_utree_t *utree, vector<int> &clvIndices)
 {
   for (auto partition: partitions) {
     pll_unode_t **travbuffer = (pll_unode_t **)malloc(partition->nodes * sizeof(pll_unode_t *));
     unsigned int traversalSize;
-    pll_unode_t *root = utree->nodes[0];
+    pll_unode_t *root = utree->nodes[partition->nodes - 1];
+   
+
+    print_split(root);
     pll_utree_traverse(root,
           PLL_TREE_TRAVERSE_POSTORDER,
           cb_full_traversal,
@@ -175,12 +205,37 @@ void updatePartials(vector<pll_partition_t *> &partitions, pll_utree_t *utree)
         operations,
         &matrix_count,
         &ops_count);
+    bool fillCLVIndices = !clvIndices.size();
     for (int i = 0; i < ops_count; ++i) {
-      pll_update_repeats(partition, operations + i);
+      pll_operation_t *op = operations + i;
+      pll_update_repeats(partition, op);
+      if (fillCLVIndices) {
+        clvIndices.push_back(op->parent_clv_index);
+      }
     }
   }
 }
 
+void printRepeats(vector<pll_partition_t *> &partitions, 
+      const string &repeatsFile,
+      const vector<int> &clvIndices)
+{
+  ofstream os(repeatsFile);
+  os << partitions.size() << " " << partitions[0]->clv_buffers << endl;
+  int index = 0;
+  for (auto partition: partitions) {
+  
+    os << "partition_" << index++ << " " << partition->sites << endl;
+    for (int n = 0; n < partition->clv_buffers; ++n) {
+      unsigned int *site_id = partition->repeats->pernode_site_id[clvIndices[n]];
+      for (int s = 0; s < partition->sites; ++s) {
+        os << site_id[s] << " ";
+      }
+      os << endl;
+    }
+  }
+
+}
 
 void printHelp()
 {
@@ -206,7 +261,9 @@ int main(int argc, char ** argv)
   partitionMSA(fullMSA, partFile, partitionnedMSAs);  
   vector<pll_partition_t *> partitions;
   createPartitions(partitionnedMSAs, partitions); 
-  updatePartials(partitions, tree); 
+  vector<int> clvIndices;
+  updatePartials(partitions, tree, clvIndices); 
+  printRepeats(partitions, outputFile, clvIndices);
   cout << "Successfuly wrote output into " << outputFile << endl;
   return 0;
 }
