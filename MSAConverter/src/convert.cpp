@@ -5,7 +5,7 @@
 #include <search.h>
 #include "pll.h"
 #include <memory>
-
+#include <exception>
 using namespace std;
 pll_utree_t *loadTree(const string &newickFile) {
   pll_utree_t * tree = pll_utree_parse_newick(newickFile.c_str());
@@ -22,8 +22,38 @@ pll_utree_t *loadTree(const string &newickFile) {
   return tree;
 }
 
+pll_msa_t *loadMSAPhylip(const string &msaFile) {
+  pll_phylip_t * fd = pll_phylip_open(msaFile.c_str(), pll_map_phylip);
+  if (!fd) {
+    cerr << "[ERROR] Cannot open " << msaFile << endl;
+    return 0;
+  }
+  pll_msa_t *msa = 0;
+  try { 
+    msa = pll_phylip_parse_sequential(fd);
+    if (!msa) {
+      throw exception();
+    }      
+  } catch (...) {
+    msa = pll_phylip_parse_interleaved(fd);
+    if (!msa) {
+      throw exception();
+    }
+  }
+  pll_phylip_close(fd);
+  return msa;
+}
+
 pll_msa_t *loadMSAFasta(const string &fastaFile)
 {
+  try {
+    pll_msa_t *msa = loadMSAPhylip(fastaFile);
+    if (msa) {
+      return msa;
+    }
+  } catch (exception e) {
+
+  }
   auto reader = pll_fasta_open(fastaFile.c_str(), pll_map_fasta);
   if (!reader) {
     cerr << "[ERROR] Cannot open " << fastaFile << endl;
