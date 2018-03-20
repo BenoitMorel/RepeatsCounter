@@ -2,7 +2,7 @@ import os
 import subprocess
 
 repeats = "/home/benoit/github/RepeatsCounter/example/small_dataset/small.repeats"
-distribute = "/home/benoit/github/RepeatsCounter/example/small_dataset/small.distribute"
+distribute = "/home/benoit/github/RepeatsCounter/example/small_dataset/small.distribution"
 executable = "/home/benoit/github/RepeatsCounter/build/RepeatsCounter" 
 
 command = [executable, repeats, distribute]
