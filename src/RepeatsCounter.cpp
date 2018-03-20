@@ -4,7 +4,7 @@
 #include <vector>
 #include <fstream>
 #include <map>
-
+#include <set>
 using namespace std;
 
 class Partition {
@@ -70,6 +70,37 @@ bool checkConsistency(const PartitionsMap &partitionsMap,
     }
   }
   return true;
+}
+
+int getCoreCost(const PartitionsMap &partitionsMap, const Core &core)
+{
+  int cost = 0;
+  for (auto &subPartition: core.subPartitions) {
+    const Partition &partition = partitionsMap.at(subPartition.partitionName);
+    for (int n = 0; n < partition.getNodesNumber(); n++) {
+      set<int> identifiers;
+      for (auto site: subPartition.sites) {
+        identifiers.insert(partition.getIdentifier(n, site));
+      }
+      cost += identifiers.size();
+    }
+  }
+  return cost;
+}
+
+void analyseDistribution(const PartitionsMap &partitionsMap,
+    const vector<Core> &cores) 
+{
+  int worst = 0;
+  int totalCost = 0;
+  for (auto &core: cores) {
+    int cost = getCoreCost(partitionsMap, core);
+    worst = std::max(worst, cost);
+    totalCost += cost;
+    cout << "Core " << core.name << " cost: \t" << cost << endl;
+  }
+  cout << "Worst core cost: \t" << worst << endl;
+  cout << "Total cost: \t \t" << totalCost << endl;
 }
 
 void parseRepeatsFile(const string &repeatsFile,
@@ -157,6 +188,7 @@ int main(int argc, char **argv)
     cerr << "Inconsistent data distribution, please check that each site is assigned once and only once" << endl;
     return 1;
   }
+  analyseDistribution(partitionsMap, cores);
   return 0;
 }
 
