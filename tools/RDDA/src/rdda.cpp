@@ -24,7 +24,8 @@ public:
   int getNodesNumber() const {return _repeats.size();}
   int getSitesNumber() const {return _repeats[0].size();}
   const string &getName() const {return _name;}
-  double getWeight() const { return _weight; }
+  double getTotalWeight() const { return _weight; }
+  double getPerSiteWeight() const { return _weight / getSitesNumber(); }
   void computeWeight() {
     _weight = 0.0;
     for (auto &clv: _repeats) {
@@ -43,22 +44,26 @@ private:
 
 class CoreAssignment {
 public:
-  CoreAssignment() : _index(0) {}
-  CoreAssignment(int index) : _index(index) {}
+  CoreAssignment() : _index(0), _isFull(false) {}
+  CoreAssignment(int index) : _index(index), _isFull(false) {}
   int assign(const string &partitionName,
       int start,
-      int size) {
+      int size,
+      double partitionPerSiteWeight) {
     _partitions[partitionName] = pair<int, int>(start, size);
+    _weight += double(size) * partitionPerSiteWeight;
   }
 
   double getWeight() const { return _weight; }
-  
+  bool isFull() const { return _isFull; } 
+  void setFull() { _isFull = true; }
   friend ostream& operator<<(ostream& os, const CoreAssignment& assignment);  
 
 private:
   map<string, pair<int, int> > _partitions;
   double _weight;
   int _index;
+  bool _isFull;
 };
   
 ostream& operator<<(ostream& os, const CoreAssignment& assignment)  
@@ -74,7 +79,7 @@ ostream& operator<<(ostream& os, const CoreAssignment& assignment)
 }
 
 bool comparePartitions(const Partition &a, 
-    const Partition &b) { return (a.getWeight()  < b.getWeight()); }
+    const Partition &b) { return (a.getTotalWeight()  < b.getTotalWeight()); }
 
 void parseRepeatsFile(const string &repeatsFile,
     vector<Partition>  &partitions)
@@ -111,7 +116,6 @@ void computeWeights(vector<Partition> &partitions)
 {
   for (auto &partition: partitions) {
     partition.computeWeight();
-    cout << partition.getWeight() << endl;
   }
 }
 
@@ -126,20 +130,48 @@ void cyclicLoadBalance(vector<Partition> &partitions,
   // compute the limit weight
   double limit = 0;
   for (auto &partition: partitions) {
-    limit += partition.getWeight() / cores;
+    limit += partition.getTotalWeight() / cores;
   }
   cout << "Weight limit: " << limit << endl;
   // cyclic assignment without split
   int currentPartition = 0;
   int currentCore = 0;
-  for (currentPartition = 0; currentPartition < partitions.size(); ++currentPartition) {
+  for (;currentPartition < partitions.size(); ++currentPartition) {
     Partition &partition = partitions[currentPartition];
     CoreAssignment &core = assignments[currentCore];
-    if (partition.getWeight() + core.getWeight() > limit) {
+    if (partition.getTotalWeight() + core.getWeight() > limit) {
       break;
     }
-    core.assign(partition.getName(), 0, partition.getSitesNumber());
+    core.assign(partition.getName(), 0, partition.getSitesNumber(), partition.getPerSiteWeight());
     currentCore = (currentCore + 1) % cores;
+  }
+
+  // cyclic split
+  for (; currentPartition < partitions.size(); ++currentPartition) {
+    Partition &partition = partitions[currentPartition];
+    int partitionOffset = 0;
+    while (partitionOffset < partition.getSitesNumber()) {
+      CoreAssignment &core = assignments[currentCore];
+      int remainingSites = partition.getSitesNumber() - partitionOffset;
+      double remainingWeight = remainingSites * partition.getPerSiteWeight();
+      double freeWeight = limit - core.getWeight();
+      int sitesToAssign = 0;
+      cout << "remaining weight " << remainingWeight << endl;
+      cout << "free weight " << freeWeight << endl;
+      if (remainingWeight < freeWeight) {
+        // assign the whole partition
+        sitesToAssign = remainingSites;
+      } else {
+        // fill the whole core
+        sitesToAssign = ceil(freeWeight / partition.getPerSiteWeight());
+        core.setFull();
+      }
+      core.assign(partition.getName(), partitionOffset, sitesToAssign, partition.getPerSiteWeight());
+      partitionOffset += sitesToAssign;
+      if (assignments[currentCore].isFull()) { // would be better to keep a container of not full cores
+        currentCore = (currentCore + 1) % cores;
+      }
+    }
   }
 }
 
