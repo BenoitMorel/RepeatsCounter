@@ -1,4 +1,4 @@
 [submodule "MSAConverter/dependencies/libpll-2"]
-	path = MSAConverter/dependencies/libpll-2
+	path = tools/MSAConverter/dependencies/libpll-2
 	url = https://github.com/xflouris/libpll-2.git
 	branch = dev
