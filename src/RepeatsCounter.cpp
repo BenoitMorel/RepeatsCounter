@@ -88,6 +88,14 @@ int getCoreCost(const PartitionsMap &partitionsMap, const Core &core)
   return cost;
 }
 
+int getCoreSites(Core core) {
+  int sites = 0;
+  for (auto &subpartition: core.subPartitions) {
+    sites += subpartition.sites.size();
+  }
+  return sites;
+}
+
 void analyseDistribution(const PartitionsMap &partitionsMap,
     const vector<Core> &cores) 
 {
@@ -97,10 +105,13 @@ void analyseDistribution(const PartitionsMap &partitionsMap,
     int cost = getCoreCost(partitionsMap, core);
     worst = std::max(worst, cost);
     totalCost += cost;
-    cout << "Core " << core.name << " cost: \t" << cost << endl;
+    cout << core.name << " RCC: "  << cost 
+         << "\t sites: " << getCoreSites(core)
+         << "\t partitions: " << core.subPartitions.size()  << endl;
   }
-  cout << "Worst core cost: \t" << worst << endl;
-  cout << "Total cost: \t \t" << totalCost << endl;
+  cout << "Worst RCC: \t\t" << worst << endl;
+  cout << "Worst RCC * cores: \t" << worst * cores.size() << endl;
+  cout << "Sum of RCCs: \t \t" << totalCost << endl;
 }
 
 void parseRepeatsFile(const string &repeatsFile,
@@ -162,9 +173,44 @@ void parseDistributionFile(const string &distributionFile,
   }
 }
 
+void generateOneCoreDistribution(PartitionsMap &partitions, 
+    vector<Core> &cores)
+{
+  cores.push_back(Core());
+  Core &core = cores[0];
+  core.name = "UniqueCore";
+  for (auto &partition: partitions) {
+    core.subPartitions.push_back(SubPartition());
+    SubPartition &sub = core.subPartitions[core.subPartitions.size() - 1];
+    sub.partitionName = partition.second.getName();
+    for (int i = 0; i < partition.second.getSitesNumber(); ++i) {
+      sub.sites.push_back(i);
+    }
+  }
+
+}
+
 void printHelp() {
   cout << "Syntax:" << endl;
   cout << "./RepeatsCounter repeats_file distribution_file" << endl;
+}
+
+void analyse(PartitionsMap &partitionsMap, vector<Core> &cores)
+{
+  bool consistent = checkConsistency(partitionsMap, cores);
+  if (!consistent) {
+    cerr << "Inconsistent data distribution, please check that each site is assigned once and only once" << endl;
+    return;
+  }
+  analyseDistribution(partitionsMap, cores);
+}
+
+void printTitle(const string &msg) 
+{
+  cout << "*******************************************" << endl;
+  cout << "** \t" << msg << "\t **" << endl;
+  cout << "*******************************************" << endl;
+  
 }
 
 int main(int argc, char **argv)
@@ -182,13 +228,13 @@ int main(int argc, char **argv)
   PartitionsMap partitionsMap;
   parseRepeatsFile(repeatsFile, partitionsMap);
   vector<Core> cores;
+  vector<Core> uniqueCore;
+  generateOneCoreDistribution(partitionsMap, uniqueCore);
   parseDistributionFile(distributionFile, cores);
-  bool consistent = checkConsistency(partitionsMap, cores);
-  if (!consistent) {
-    cerr << "Inconsistent data distribution, please check that each site is assigned once and only once" << endl;
-    return 1;
-  }
-  analyseDistribution(partitionsMap, cores);
+  printTitle("Analyse with one single core");
+  analyse(partitionsMap, uniqueCore);
+  printTitle("Analyse with multiple cores");
+  analyse(partitionsMap, cores);
   return 0;
 }
 
