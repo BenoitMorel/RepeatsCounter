@@ -4,6 +4,7 @@
 #include <string>
 #include <fstream>
 #include <algorithm>
+#include <stack>
 
 using namespace std;
 
@@ -173,6 +174,111 @@ void cyclicLoadBalance(vector<Partition> &partitions,
       }
     }
   }
+}
+
+void rddaLoadBalance(vector<Partition> &partitions,
+    int cores,
+    vector<CoreAssignment> &assignments)
+{
+  assignments.clear();
+  for (unsigned int i = 0; i < cores; ++i) {
+    assignments.push_back(CoreAssignment(i));
+  }
+  // compute the limit weight
+  double limit = 0;
+  for (auto &partition: partitions) {
+    limit += partition.getTotalWeight() / cores;
+  }
+  cout << "Weight limit: " << limit << endl;
+  // cyclic assignment without split
+  int currentPartition = 0;
+  int currentCore = 0;
+  for (;currentPartition < partitions.size(); ++currentPartition) {
+    Partition &partition = partitions[currentPartition];
+    CoreAssignment &core = assignments[currentCore];
+    if (partition.getTotalWeight() + core.getWeight() > limit) {
+      break;
+    }
+    core.assign(partition.getName(), 0, partition.getSitesNumber(), partition.getPerSiteWeight());
+    currentCore = (currentCore + 1) % cores;
+  }
+  stack<int> qlowCores;
+  stack<int> qhighCores;
+  stack<int> &qlow = qlowCores;
+  stack<int> &qhigh = qhighCores;
+
+  for (unsigned int c = 0; c < currentCore; ++c) {
+    qhigh.push(c);
+  }
+  for (unsigned int c = currentCore; c < cores; ++c) {
+    qlow.push(c);
+  }
+
+ 
+  for (; currentPartition < partitions.size(); ++currentPartition) {
+    Partition &partition = partitions[currentPartition];
+    int partitionRemainingSites = partition.getSitesNumber();
+    while (partitionRemainingSites > 0) {
+      int partitionOffset = partition.getSitesNumber() - partitionRemainingSites;
+      CoreAssignment &core = assignments[qhigh.top()];
+      int sitesToAssign = ceil( (limit - core.getWeight()) / partition.getPerSiteWeight());
+      if (partitionRemainingSites > sitesToAssign) {
+        core.assign(partition.getName(), partitionOffset, sitesToAssign, partition.getPerSiteWeight()); 
+        partitionRemainingSites -= sitesToAssign;
+        qhigh.pop();
+      } else {
+        core = assignments[qlow.top()];
+        sitesToAssign = ceil( (limit - core.getWeight()) / partition.getPerSiteWeight());
+        if (partitionRemainingSites > sitesToAssign) {
+          core.assign(partition.getName(), partitionOffset, sitesToAssign, partition.getPerSiteWeight()); 
+          partitionRemainingSites -= sitesToAssign;
+          qlow.pop();
+        } else {
+          core = assignments[qlow.top()];
+          sitesToAssign = partitionRemainingSites;
+          core.assign(partition.getName(), partitionOffset, sitesToAssign, partition.getPerSiteWeight()); 
+          partitionRemainingSites -= sitesToAssign;
+          qhigh.push(qlow.top()); 
+          qlow.pop();
+        }
+      }
+      if (!qlow.size()) { // trick: when qlow is empty, always fill qhigh instead
+        qlow = qhigh;
+      }
+    
+    
+    }
+  }
+
+    /*
+  // cyclic split
+  for (; currentPartition < partitions.size(); ++currentPartition) {
+    Partition &partition = partitions[currentPartition];
+    int partitionOffset = 0;
+    while (partitionOffset < partition.getSitesNumber()) {
+      CoreAssignment &core = assignments[currentCore];
+      int remainingSites = partition.getSitesNumber() - partitionOffset;
+      double remainingWeight = remainingSites * partition.getPerSiteWeight();
+      double freeWeight = limit - core.getWeight();
+      int sitesToAssign = 0;
+      cout << "remaining weight " << remainingWeight << endl;
+      cout << "free weight " << freeWeight << endl;
+      if (remainingWeight < freeWeight) {
+        // assign the whole partition
+        sitesToAssign = remainingSites;
+      } else {
+        // fill the whole core
+        sitesToAssign = ceil(freeWeight / partition.getPerSiteWeight());
+        core.setFull();
+      }
+      core.assign(partition.getName(), partitionOffset, sitesToAssign, partition.getPerSiteWeight());
+      partitionOffset += sitesToAssign;
+      if (assignments[currentCore].isFull()) { // would be better to keep a container of not full cores
+        currentCore = (currentCore + 1) % cores;
+      }
+    }
+  }
+  */
 }
 
 void writeAssignment(vector<CoreAssignment> &assignments, 
