@@ -5,6 +5,7 @@
 #include <fstream>
 #include <algorithm>
 #include <stack>
+#include <cmath>
 
 using namespace std;
 
