@@ -97,21 +97,34 @@ int getCoreSites(Core core) {
 }
 
 void analyseDistribution(const PartitionsMap &partitionsMap,
-    const vector<Core> &cores) 
+    const vector<Core> &cores,
+    vector<int> &costs,
+    vector<int> &partitionNumbers,
+    int &worstCost,
+    int &totalCost
+    ) 
 {
-  int worst = 0;
-  int totalCost = 0;
+  costs.clear();
+  partitionNumbers.clear();
+  worstCost= 0;
+  totalCost = 0;
   for (auto &core: cores) {
     int cost = getCoreCost(partitionsMap, core);
-    worst = std::max(worst, cost);
+    worstCost = std::max(worstCost, cost);
     totalCost += cost;
-    cout << core.name << " RCC: "  << cost 
+    costs.push_back(cost);
+    partitionNumbers.push_back(core.subPartitions.size());
+    /*
+      cout << core.name << " RCC: "  << cost 
          << "\t sites: " << getCoreSites(core)
          << "\t partitions: " << core.subPartitions.size()  << endl;
+         */
   }
+  /*
   cout << "Worst RCC: \t\t" << worst << endl;
   cout << "Worst RCC * cores: \t" << worst * cores.size() << endl;
   cout << "Sum of RCCs: \t \t" << totalCost << endl;
+  */
 }
 
 void parseRepeatsFile(const string &repeatsFile,
@@ -187,7 +200,6 @@ void generateOneCoreDistribution(PartitionsMap &partitions,
       sub.sites.push_back(i);
     }
   }
-
 }
 
 void printHelp() {
@@ -195,21 +207,25 @@ void printHelp() {
   cout << "./RepeatsCounter repeats_file distribution_file" << endl;
 }
 
-void analyse(PartitionsMap &partitionsMap, vector<Core> &cores)
+void analyse(PartitionsMap &partitionsMap, vector<Core> &cores,
+    vector<int> &costs,
+    vector<int> &partitionNumbers,
+    int &worstCore,
+    int &totalCost)
 {
   bool consistent = checkConsistency(partitionsMap, cores);
   if (!consistent) {
     cerr << "Inconsistent data distribution, please check that each site is assigned once and only once" << endl;
     return;
   }
-  analyseDistribution(partitionsMap, cores);
+  analyseDistribution(partitionsMap, cores, costs, partitionNumbers, worstCore, totalCost);
 }
 
 void printTitle(const string &msg) 
 {
-  cout << "*******************************************" << endl;
+  cout << "***********************************" << endl;
   cout << "** \t" << msg << "\t **" << endl;
-  cout << "*******************************************" << endl;
+  cout << "***********************************" << endl;
   
 }
 
@@ -227,14 +243,40 @@ int main(int argc, char **argv)
   
   PartitionsMap partitionsMap;
   parseRepeatsFile(repeatsFile, partitionsMap);
-  vector<Core> cores;
   vector<Core> uniqueCore;
+  vector<Core> cores;
   generateOneCoreDistribution(partitionsMap, uniqueCore);
   parseDistributionFile(distributionFile, cores);
-  printTitle("Analyse with one single core");
-  analyse(partitionsMap, uniqueCore);
-  printTitle("Analyse with multiple cores");
-  analyse(partitionsMap, cores);
+  //printTitle("Analyse with one single core");
+  //
+  vector<int> singleCosts;
+  vector<int> singlePartitions;
+  vector<int> costs;
+  vector<int> partitions;
+  int singleWorstCore;
+  int singleTotalCost;
+  int worstCore;
+  int totalCost;
+  printTitle("Analysis results");
+  analyse(partitionsMap, uniqueCore, singleCosts, singlePartitions, singleWorstCore, singleTotalCost);
+  analyse(partitionsMap, cores, costs, partitions, worstCore, totalCost);
+
+  int maxPartitions = 0;
+  
+  for (unsigned int i = 0; i < cores.size(); ++i) {
+    auto &core = cores[i];
+    maxPartitions = max(maxPartitions, (int)core.subPartitions.size());
+    cout << core.name << " RCC: "  << costs[i] 
+         << "\t sites: " << getCoreSites(core) 
+         << "\t partitions: " << core.subPartitions.size()  << endl;
+  }
+  cout << endl;
+  cout << "Worst RCC lower bound:\t" << singleTotalCost / cores.size() << " (total RCC before split / number of cores)" << endl;
+  cout << "Worst RCC: \t\t" << worstCore << endl;
+  cout << "Worst RCC * cores: \t" << worstCore * cores.size() << endl;
+  cout << "Sum of RCCs: \t \t" << totalCost << endl;
+  cout << "Total repeats loss:\t" << totalCost - singleTotalCost << endl;
+  cout << "Worst partitions:\t" << maxPartitions << endl;
   return 0;
 }
 
