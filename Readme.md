@@ -12,6 +12,7 @@ You will need cmake to compile the project.
 
 Run the following:
 ```
+cd RepeatsCounter
 mkdir build
 cd build
 cmake ..
@@ -24,39 +25,26 @@ From the build directory:
 ./RepeatsCounter repeats_file distribution_file
 ```
 
-For instance, from the build directory:
+
+# RDDA
+A quick implementation of RDDA is provided 
+
+Compilation:
 ```
-benoit:~/github/RepeatsCounter/build$ ./RepeatsCounter ../example/small_dataset/small.repeats ../example/small_dataset/small.distribution
-Parsing repeats file ../example/small_dataset/small.repeats...
-Parsing distribution file ../example/small_dataset/small.distribution...
-*******************************************
-**  Analyse with one single core   **
-*******************************************
-UniqueCore RCC: 26   sites: 10   partitions: 2
-Worst RCC:    26
-Worst RCC * cores:  26
-Sum of RCCs:    26
-*******************************************
-**  Analyse with multiple cores  **
-*******************************************
-CPU1 RCC: 13   sites: 5  partitions: 1
-CPU2 RCC: 14   sites: 5  partitions: 2
-Worst RCC:    14
-Worst RCC * cores:  28
-Sum of RCCs:    27
+cd RDDA
+mkdir build
+cd build
+cmake ..
+make
 ```
 
-The first analysis is the sequential RCC (with only one core, not parallelization, no split). You can see it like the ultimate lower bound, that you can not reach.
-The second analysis is run on your distribution file.
-- The worst RCC is the target to minimize, for a given repeats file and a given number of cores. 
-- The sum of RCCs is the sum over the cores of there respective RCC. The less you split repeats, the closer it will be to the unique-core RCC.
-- The Worst RCC * cores will get closer to the sum of RCC if your load balance gets better.
-To acheive this, you need to reduce the total cost while keeping the load balance among cores as good as possible.
-This example is useful to undertand files syntaxes, but you should better work on the files in datasets.tar.gz.
+Running:
+```
+./rdda repeats_file cores output_file
+```
 
 
-
-## Generating repeats file (for teachers)
+## Generating repeats file from MSA and partition file (for teachers)
 
 @Students: you don't need to read this paragraph :-)
 
