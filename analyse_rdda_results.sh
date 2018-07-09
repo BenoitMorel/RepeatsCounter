@@ -1,13 +1,15 @@
+cd RepeatsCounter
 mkdir -p build
 cd build
 cmake ..
 make
-cd ..
-build/RepeatsCounter datasets/59.repeats datasets/59.rdda.txt
+cd ../..
+cores=10
+RepeatsCounter/build/RepeatsCounter datasets/59.repeats results/59_${cores}cores.rdda.txt
 echo ""
 echo ""
-build/RepeatsCounter datasets/128.repeats datasets/128.rdda.txt
+RepeatsCounter/build/RepeatsCounter datasets/128.repeats results/128_${cores}cores.rdda.txt
 echo ""
 echo ""
-build/RepeatsCounter datasets/404.repeats datasets/404.rdda.txt
+RepeatsCounter/build/RepeatsCounter datasets/404.repeats results/404_${cores}cores.rdda.txt
 
