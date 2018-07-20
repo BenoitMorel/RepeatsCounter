@@ -6,6 +6,8 @@
 #include "pll.h"
 #include <memory>
 #include <exception>
+#include <sstream> 
+
 using namespace std;
 pll_utree_t *loadTree(const string &newickFile) {
   pll_utree_t * tree = pll_utree_parse_newick(newickFile.c_str());
@@ -33,7 +35,9 @@ pll_msa_t *loadMSAPhylip(const string &msaFile) {
     msa = pll_phylip_parse_sequential(fd);
     if (!msa) {
       throw exception();
-    }      
+    }     
+    cout << "msa size " << msa->length << endl;
+    cout << "msa count " << msa->count << endl;
   } catch (...) {
     msa = pll_phylip_parse_interleaved(fd);
     if (!msa) {
@@ -46,6 +50,7 @@ pll_msa_t *loadMSAPhylip(const string &msaFile) {
 
 pll_msa_t *loadMSAFasta(const string &fastaFile)
 {
+  cout << "Read MSA..." << endl;
   try {
     pll_msa_t *msa = loadMSAPhylip(fastaFile);
     if (msa) {
@@ -95,6 +100,7 @@ pll_msa_t *loadMSAFasta(const string &fastaFile)
   }
   */
   pll_fasta_close(reader);
+  cout << "end read MSA" << endl;
   return msa;
 }
 
@@ -102,41 +108,69 @@ void partitionMSA(const pll_msa_t *msa,
     const string &partFile,
     vector<pll_msa_t *> &partitionnedMSAs)
 {
-  ifstream is(partFile);
-  if (!is) {
+  ifstream globalis(partFile);
+  if (!globalis) {
     cerr << "[ERROR] Cannot parse " << partFile << endl;
     return;
   }
-  while (is) {
+  while (globalis) {
+    string line;
+    getline(globalis, line);
+    istringstream is(line);
     string temp;
     is >> temp;
     if (!is) 
       break;
     is >> temp; is >> temp;
-    int first, last;
+    int first;
     is >> first;
-    is.get();
-    is >> last;
-    first -= 1;
-    pll_msa_t *submsa = (pll_msa_t *)malloc(sizeof(pll_msa_t));
-    submsa->count = msa->count;
-    submsa->length = last - first;
-    submsa->sequence = (char **)malloc(sizeof(char*) * submsa->count);
-    submsa->label = msa->label; // todobenoit do this correctly to avoid double free
-    for (int i = 0; i < submsa->count; ++i) {
-      submsa->sequence[i] = (char*)malloc(sizeof(char) * submsa->length);
-      memcpy(submsa->sequence[i], msa->sequence[i] + first, submsa->length);
+    char separator = is.get();
+    if (separator == '-') {
+      int last;
+      is >> last;
+      first -= 1;
+      pll_msa_t *submsa = (pll_msa_t *)malloc(sizeof(pll_msa_t));
+      submsa->count = msa->count;
+      submsa->length = last - first;
+      submsa->sequence = (char **)malloc(sizeof(char*) * submsa->count);
+      submsa->label = msa->label; // todobenoit do this correctly to avoid double free
+      for (int i = 0; i < submsa->count; ++i) {
+        submsa->sequence[i] = (char*)malloc(sizeof(char) * submsa->length);
+        memcpy(submsa->sequence[i], msa->sequence[i] + first, submsa->length);
+      }
+      partitionnedMSAs.push_back(submsa);
+    } else if (separator == ',') {
+      vector<int> indices;
+      indices.push_back(first);
+      while (is) {
+        int index;
+        is >> index;
+        indices.push_back(index);
+        is.get();
+      }
+      pll_msa_t *submsa = (pll_msa_t *)malloc(sizeof(pll_msa_t));
+      submsa->count = msa->count;
+      submsa->length = indices.size();
+      submsa->sequence = (char **)malloc(sizeof(char*) * submsa->count);
+      submsa->label = msa->label; // todobenoit do this correctly to avoid double free
+      for (int i = 0; i < submsa->count; ++i) {
+        submsa->sequence[i] = (char*)malloc(sizeof(char) * submsa->length);
+        char *subseq = submsa->sequence[i];
+        char *seq = msa->sequence[i];
+        for (int j = 0; j < indices.size(); ++j) {
+          subseq[j] = seq[indices[j] - 1];
+        }
+      }
+      partitionnedMSAs.push_back(submsa);
+    } else {
+      cerr << "[ERROR] Cannot parse " << partFile << " (wrong delimitor) " << endl;
+      return;
     }
-    partitionnedMSAs.push_back(submsa);
+    cout << "Read partition " << partitionnedMSAs.size() << endl;
   }
+  cout << "end of reading partition file" << endl;
 }
 
-unsigned int always_enable_repeats(pll_partition_t *partition,
-    unsigned int left_clv,
-    unsigned int right_clv)
-{
-  return 1;
-}
 
 pll_partition_t *createPartition(const pll_msa_t *msa)
 {
@@ -157,7 +191,7 @@ pll_partition_t *createPartition(const pll_msa_t *msa)
     cerr << "[ERROR] Repeats disabled" << endl;
     return 0;
   }
-  partition->repeats->enable_repeats = always_enable_repeats;
+  //partition->repeats->enable_repeats = always_enable_repeats;
   double frequencies[4] = { 0.17, 0.19, 0.25, 0.39 };
   double subst_params[6] = {1,1,1,1,1,1};
   double rate_cats[RATES] = {1.0};
@@ -182,9 +216,11 @@ pll_partition_t *createPartition(const pll_msa_t *msa)
 void createPartitions(const vector<pll_msa_t *> &msas,
   vector<pll_partition_t *> &partitions)
 {
+  cout << "Creating sub-partitions..." << endl;
   for (auto msa: msas) {
     partitions.push_back(createPartition(msa));
   }
+  cout << "End of creating sub-partitions..." << endl;
 }
 
 void rec_print_leaves(pll_unode_t *node) {
@@ -210,13 +246,14 @@ static int cb_full_traversal(pll_unode_t * node)
 
 void updatePartials(vector<pll_partition_t *> &partitions, pll_utree_t *utree, vector<int> &clvIndices)
 {
+  int p = 0;
   for (auto partition: partitions) {
     pll_unode_t **travbuffer = (pll_unode_t **)malloc(partition->nodes * sizeof(pll_unode_t *));
     unsigned int traversalSize;
     pll_unode_t *root = utree->nodes[partition->nodes - 1];
    
 
-    print_split(root);
+    //t coprint_split(root);
     pll_utree_traverse(root,
           PLL_TREE_TRAVERSE_POSTORDER,
           cb_full_traversal,
@@ -243,6 +280,7 @@ void updatePartials(vector<pll_partition_t *> &partitions, pll_utree_t *utree, v
         clvIndices.push_back(op->parent_clv_index);
       }
     }
+    cout << "Computed repeats partition " << p++ << endl;
   }
 }
 
@@ -250,11 +288,11 @@ void printRepeats(vector<pll_partition_t *> &partitions,
       const string &repeatsFile,
       const vector<int> &clvIndices)
 {
-  ofstream os(repeatsFile);
-  os << partitions.size() << " " << partitions[0]->clv_buffers << endl;
+  ofstream osf(repeatsFile);
+  osf << partitions.size() << " " << partitions[0]->clv_buffers << endl;
   int index = 0;
   for (auto partition: partitions) {
-  
+    ostringstream os;
     os << "partition_" << index++ << " " << partition->sites << endl;
     for (int n = 0; n < partition->clv_buffers; ++n) {
       unsigned int *site_id = partition->repeats->pernode_site_id[clvIndices[n]];
@@ -263,6 +301,8 @@ void printRepeats(vector<pll_partition_t *> &partitions,
       }
       os << endl;
     }
+    osf << os.str();
+    cout << "wrote repeats partition " << index << endl;
   }
 
 }
