@@ -61,7 +61,7 @@ public:
   void setFull() { _isFull = true; }
   friend ostream& operator<<(ostream& os, const CoreAssignment& assignment);  
 
-private:
+public:
   map<string, pair<int, int> > _partitions;
   double _weight;
   int _index;
@@ -289,9 +289,43 @@ void writeAssignment(vector<CoreAssignment> &assignments,
   ofstream os(outputFilename);
   os <<  assignments.size() << endl;
   int index = 0;
-  for (auto assignment: assignments) {
+  for (auto &assignment: assignments) {
     os << assignment;
   }
+}
+
+void writeSplits(vector<CoreAssignment> &assignments,
+  const string &outputFilename)
+{
+  cout << "Writing splits into " << outputFilename << endl;
+  ofstream os(outputFilename);
+  // partitionAssignments[partitionName][i]  == {core, sites}
+  map<string, vector<pair<int, int> > > partitionAssignments;
+  for (auto &assignment: assignments) {
+    for (auto &partition: assignment._partitions) {
+      string partitionName = partition.first;
+      int sites = partition.second.second;
+      if (partitionAssignments.end() != partitionAssignments.find(partitionName)) {
+        partitionAssignments.insert(
+          make_pair(partitionName, vector<pair<int, int> >()));
+      }
+      partitionAssignments[partitionName].push_back(make_pair(assignment._index, sites));
+    } 
+  }
+
+  for (auto &partition: partitionAssignments) {
+    int totalSites = 0;
+    const string &partitionName = partition.first;
+    auto &assignments = partition.second;
+    os << partitionName << " " << assignments.size() << endl; 
+    for (auto &assignment: assignments) {
+      totalSites += assignment.second;
+    }
+    for (auto &assignment: assignments) {
+      os << "Core" << assignment.first << " " << float(assignment.second) / float(totalSites) << endl; 
+    }
+  }
+  
 }
 
 void printHelp()
@@ -309,7 +343,7 @@ int main(int argc, char ** argv)
   string repeatsFilename = argv[i++];
   int cores = atoi(argv[i++]);
   string outputFilename = argv[i++];
- 
+  string splitsFilename = outputFilename + ".splits";
   vector<Partition> partitions;
   vector<CoreAssignment> assignments;
   parseRepeatsFile(repeatsFilename, partitions);
@@ -317,6 +351,8 @@ int main(int argc, char ** argv)
   sort(partitions.begin(), partitions.end(), comparePartitions);
   cyclicLoadBalance(partitions, cores, assignments);
   writeAssignment(assignments, outputFilename);
+  writeSplits(assignments, splitsFilename);
+
   return 0;
 }
 
