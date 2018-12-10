@@ -48,7 +48,7 @@ class CoreAssignment {
 public:
   CoreAssignment() : _index(0), _isFull(false) {}
   CoreAssignment(int index) : _index(index), _isFull(false) {}
-  int assign(const string &partitionName,
+  void assign(const string &partitionName,
       int start,
       int size,
       double partitionPerSiteWeight) {
@@ -78,6 +78,7 @@ ostream& operator<<(ostream& os, const CoreAssignment& assignment)
     }
     os << endl;
   }
+  return os;
 }
 
 bool comparePartitions(const Partition &a, 
